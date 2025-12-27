@@ -1,0 +1,351 @@
+#include "DbHandler.h"
+#include <QSqlError>
+#include <QDebug>
+#include <QUuid>
+#include <QDateTime>
+#include <QThread>
+
+DbHandler::DbHandler(QObject *parent) : QObject(parent) {}
+
+DbHandler::~DbHandler()
+{
+    if (m_db.isOpen())
+        m_db.close();
+}
+
+bool DbHandler::connectDb(const QString &dsn, const QString &user, const QString &password)
+{
+    m_dsn = dsn;
+    m_user = user;
+    m_password = password;
+
+    m_db = QSqlDatabase::addDatabase("QODBC", "main_connection");
+    m_db.setDatabaseName(dsn);
+    m_db.setUserName(user);
+    m_db.setPassword(password);
+
+    if (m_db.open()) {
+        qDebug() << "数据库连接成功";
+        return true;
+    } else {
+        qDebug() << "数据库连接失败：" << m_db.lastError().text();
+        return false;
+    }
+}
+
+bool DbHandler::isConnected()
+{
+    return m_db.isOpen();
+}
+
+QSqlDatabase DbHandler::getThreadSafeDb() {
+    QString connectionName = QString("conn_%1").arg((quintptr)QThread::currentThreadId());
+
+    if (QSqlDatabase::contains(connectionName)) {
+        QSqlDatabase db = QSqlDatabase::database(connectionName);
+        if (db.isOpen()) {
+            return db;
+        } else {
+            QSqlDatabase::removeDatabase(connectionName);
+        }
+    }
+
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
+    db.setDatabaseName(m_dsn);
+    db.setUserName(m_user);
+    db.setPassword(m_password);
+
+    if (!db.open()) {
+        qWarning() << "线程数据库连接失败：" << db.lastError().text();
+    }
+    return db;
+}
+
+QJsonObject DbHandler::verifyUser(const QString &username, const QString &password)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT * FROM userdata WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        if (query.value("password").toString() == password) {
+            resp["code"] = 200;
+            resp["data"] = QJsonObject{
+                {"username", username},
+                {"realname", query.value("realname").toString()},
+                {"phone", query.value("phone").toString()},
+                {"email", query.value("email").toString()}
+            };
+        } else {
+            resp["code"] = 401;
+            resp["msg"] = "密码错误";
+        }
+    } else {
+        resp["code"] = 404;
+        resp["msg"] = "用户不存在";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::getUserInfo(const QString &username)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT * FROM userdata WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        resp["code"] = 200;
+        resp["data"] = QJsonObject{
+            {"username", query.value("username").toString()},
+            {"realname", query.value("realname").toString()},
+            {"phone", query.value("phone").toString()},
+            {"email", query.value("email").toString()}
+        };
+    } else {
+        resp["code"] = 404;
+        resp["msg"] = "用户不存在";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::changePassword(const QString &username, const QString &oldPwd, const QString &newPwd)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT password FROM userdata WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        if (query.value("password").toString() == oldPwd) {
+            query.prepare("UPDATE userdata SET password = :newPwd WHERE username = :username");
+            query.bindValue(":newPwd", newPwd);
+            query.bindValue(":username", username);
+            if (query.exec()) {
+                resp["code"] = 200;
+                resp["msg"] = "密码修改成功";
+            } else {
+                resp["code"] = 500;
+                resp["msg"] = "密码修改失败";
+            }
+        } else {
+            resp["code"] = 401;
+            resp["msg"] = "原密码错误";
+        }
+    } else {
+        resp["code"] = 404;
+        resp["msg"] = "用户不存在";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::getFlightList(const QString &fromCity, const QString &toCity, const QString &date)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    QString sql = "SELECT * FROM flightdata WHERE 1=1";
+    if (!fromCity.isEmpty()) sql += " AND from_city = :from";
+    if (!toCity.isEmpty()) sql += " AND to_city = :to";
+    if (!date.isEmpty()) sql += " AND date = :date";
+
+    query.prepare(sql);
+    if (!fromCity.isEmpty()) query.bindValue(":from", fromCity);
+    if (!toCity.isEmpty()) query.bindValue(":to", toCity);
+    if (!date.isEmpty()) query.bindValue(":date", date);
+
+    QJsonArray arr;
+    if (query.exec()) {
+        while (query.next()) {
+            arr.append(QJsonObject{
+                {"flight_num", query.value("flight_num").toString()},
+                {"from_city", query.value("from_city").toString()},
+                {"to_city", query.value("to_city").toString()},
+                {"date", query.value("date").toString()},
+                {"depart_time", query.value("depart_time").toString()},
+                {"arrive_time", query.value("arrive_time").toString()},
+                {"price", query.value("price").toString()},
+                {"remaining", query.value("remaining").toInt()}
+            });
+        }
+        resp["code"] = 200;
+        resp["data"] = arr;
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "查询失败";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::bookFlight(const QString &username, const QString &flightNum)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT id, remaining, price FROM flightdata WHERE flight_num = :flight_num");
+    query.bindValue(":flight_num", flightNum);
+    if (query.exec() && query.next()) {
+        int flightId = query.value("id").toInt();
+        int remaining = query.value("remaining").toInt();
+        QString price = query.value("price").toString();
+
+        if (remaining <= 0) {
+            resp["code"] = 400;
+            resp["msg"] = "航班已售罄";
+            return resp;
+        }
+
+        QString orderNum = QUuid::createUuid().toString().remove("{").remove("}").remove("-");
+        query.prepare("INSERT INTO orders (order_num, username, flight_id, passenger, seat, price, status, create_time) VALUES (:order_num, :username, :flight_id, :passenger, :seat, :price, '已预订', NOW())");
+        query.bindValue(":order_num", orderNum);
+        query.bindValue(":username", username);
+        query.bindValue(":flight_id", flightId);
+        query.bindValue(":passenger", username);
+        query.bindValue(":seat", QString("%1%2").arg(rand() % 30 + 1).arg(QChar('A' + (rand() % 6))));
+        query.bindValue(":price", price);
+
+        if (query.exec()) {
+            query.prepare("UPDATE flightdata SET remaining = remaining - 1 WHERE id = :flight_id");
+            query.bindValue(":flight_id", flightId);
+            query.exec();
+
+            resp["code"] = 200;
+            resp["msg"] = "预订成功";
+            resp["data"] = QJsonObject{{"order_num", orderNum}};
+        } else {
+            resp["code"] = 500;
+            resp["msg"] = "订单创建失败";
+        }
+    } else {
+        resp["code"] = 404;
+        resp["msg"] = "航班不存在";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::getOrderListWithFlight(const QString &username)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare(R"(
+        SELECT o.order_num, o.status, o.price, o.create_time,
+               f.flight_num, f.from_city, f.to_city, f.date, f.depart_time, f.arrive_time
+        FROM orders o
+        LEFT JOIN flightdata f ON o.flight_id = f.id
+        WHERE o.username = :username
+        ORDER BY o.create_time DESC
+    )");
+    query.bindValue(":username", username);
+
+    QJsonArray arr;
+    if (query.exec()) {
+        while (query.next()) {
+            arr.append(QJsonObject{
+                {"order_num", query.value("order_num").toString()},
+                {"flight_num", query.value("flight_num").toString()},
+                {"from_city", query.value("from_city").toString()},
+                {"to_city", query.value("to_city").toString()},
+                {"date", query.value("date").toString()},
+                {"depart_time", query.value("depart_time").toString()},
+                {"arrive_time", query.value("arrive_time").toString()},
+                {"status", query.value("status").toString()},
+                {"price", query.value("price").toString()},
+                {"create_time", query.value("create_time").toString()}
+            });
+        }
+        resp["code"] = 200;
+        resp["data"] = arr;
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "订单查询失败";
+    }
+    return resp;
+}
+
+QJsonObject DbHandler::refundOrder(const QString &orderNum, const QString &username)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare(R"(
+        SELECT o.flight_id, o.status FROM orders o
+        WHERE o.order_num = :order_num AND o.username = :username
+    )");
+    query.bindValue(":order_num", orderNum);
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        QString status = query.value("status").toString();
+        if (status == "已取消") {
+            resp["code"] = 400;
+            resp["msg"] = "订单已退票";
+            return resp;
+        }
+
+        int flightId = query.value("flight_id").toInt();
+        query.prepare("UPDATE orders SET status = '已取消' WHERE order_num = :order_num");
+        query.bindValue(":order_num", orderNum);
+        if (query.exec()) {
+            query.prepare("UPDATE flightdata SET remaining = remaining + 1 WHERE id = :flight_id");
+            query.bindValue(":flight_id", flightId);
+            query.exec();
+
+            resp["code"] = 200;
+            resp["msg"] = "退票成功";
+        } else {
+            resp["code"] = 500;
+            resp["msg"] = "退票失败";
+        }
+    } else {
+        resp["code"] = 404;
+        resp["msg"] = "订单不存在或不属于当前用户";
+    }
+    return resp;
+}
