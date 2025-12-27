@@ -270,7 +270,8 @@ QJsonObject DbHandler::getOrderListWithFlight(const QString &username)
     QSqlQuery query(db);
     query.prepare(R"(
         SELECT o.order_num, o.status, o.price, o.create_time,
-               f.flight_num, f.from_city, f.to_city, f.date, f.depart_time, f.arrive_time
+               f.flight_num, f.from_city, f.from_airport, f.to_city, f.to_airport,
+               f.date, f.depart_time, f.arrive_time
         FROM orders o
         LEFT JOIN flightdata f ON o.flight_id = f.id
         WHERE o.username = :username
@@ -285,7 +286,9 @@ QJsonObject DbHandler::getOrderListWithFlight(const QString &username)
                 {"order_num", query.value("order_num").toString()},
                 {"flight_num", query.value("flight_num").toString()},
                 {"from_city", query.value("from_city").toString()},
+                {"from_airport", query.value("from_airport").toString()}, // 新增
                 {"to_city", query.value("to_city").toString()},
+                {"to_airport", query.value("to_airport").toString()},   // 新增
                 {"date", query.value("date").toString()},
                 {"depart_time", query.value("depart_time").toString()},
                 {"arrive_time", query.value("arrive_time").toString()},
@@ -323,14 +326,14 @@ QJsonObject DbHandler::refundOrder(const QString &orderNum, const QString &usern
 
     if (query.exec() && query.next()) {
         QString status = query.value("status").toString();
-        if (status == "已取消") {
+        if (status == "已退票") {
             resp["code"] = 400;
             resp["msg"] = "订单已退票";
             return resp;
         }
 
         int flightId = query.value("flight_id").toInt();
-        query.prepare("UPDATE orders SET status = '已取消' WHERE order_num = :order_num");
+        query.prepare("UPDATE orders SET status = '已退票' WHERE order_num = :order_num");
         query.bindValue(":order_num", orderNum);
         if (query.exec()) {
             query.prepare("UPDATE flightdata SET remaining = remaining + 1 WHERE id = :flight_id");
