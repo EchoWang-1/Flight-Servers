@@ -30,6 +30,8 @@ public:
     QJsonObject getOrderListWithFlight(const QString &username);
     QJsonObject refundOrder(const QString &orderNum, const QString &username);
 
+    QSqlDatabase getDb() const { return m_db; }
+
 private:
     QSqlDatabase getThreadSafeDb();
     QSqlDatabase m_db;

@@ -16,6 +16,9 @@ protected:
 
 private:
     DbHandler *m_dbHandler;
+    QString getDatabaseName();
+    QStringList getTableNames();
+
 };
 
 #endif // TCPSERVER_H
