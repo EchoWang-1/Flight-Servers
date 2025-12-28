@@ -7,7 +7,7 @@
 TcpServer::TcpServer(QObject *parent) : QTcpServer(parent)
 {
     m_dbHandler = new DbHandler(this);
-    if (!m_dbHandler->connectDb("Mydb", "root", "123456")) {
+    if (!m_dbHandler->connectDb("flight_management", "root", "wangjinkai521..0")) {
         qFatal("数据库连接失败");
     }
 }

@@ -51,6 +51,12 @@ void ClientHandler::processRequest(const QJsonObject &request)
 
     if (type == "login") {
         resp = handleLogin(data);
+    }else if (type == "register") {
+        resp = handleRegister(data);
+    } else if (type == "check_phone") {
+        resp = handleCheckPhone(data);
+    } else if (type == "check_idcard") {
+        resp = handleCheckIdCard(data);
     } else if (type == "get_user_info") {
         resp = handleGetUserInfo(data);
     } else if (type == "change_password") {
@@ -78,13 +84,76 @@ QJsonObject ClientHandler::handleLogin(const QJsonObject &data)
     QJsonObject resp;
     resp["type"] = "login_reply";
 
-    QString username = data["username"].toString();
+    QString phone = data["phone"].toString();
     QString password = data["password"].toString();
 
-    QJsonObject dbResp = m_dbHandler->verifyUser(username, password);
+    QJsonObject dbResp = m_dbHandler->verifyUser(phone, password);
     if (dbResp["code"].toInt() == 200) {
         resp["success"] = true;
         resp["data"] = dbResp["data"].toObject();
+    } else {
+        resp["success"] = false;
+        resp["message"] = dbResp["msg"].toString();
+    }
+    return resp;
+}
+
+
+QJsonObject ClientHandler::handleRegister(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "register_reply";
+
+    // nickname 对应 username，不需要 realname
+    QString username = data["nickname"].toString();  // nickname 作为 username
+    QString password = data["password"].toString();
+    QString phone = data["phone"].toString();
+    QString idCard = data["id_card"].toString();  // 可选的身份证号
+
+    QJsonObject dbResp = m_dbHandler->registerUser(username, password, phone, idCard);
+    if (dbResp["code"].toInt() == 200) {
+        resp["success"] = true;
+        resp["data"] = dbResp["data"].toObject();
+    } else {
+        resp["success"] = false;
+        resp["message"] = dbResp["msg"].toString();
+    }
+    return resp;
+}
+
+QJsonObject ClientHandler::handleCheckPhone(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "check_phone_reply";
+
+    QString phone = data["phone"].toString();
+    QJsonObject dbResp = m_dbHandler->checkPhoneExists(phone);
+
+    if (dbResp["code"].toInt() == 200) {
+        resp["success"] = true;
+        resp["data"] = QJsonObject{
+            {"exists", dbResp["exists"].toBool()}
+        };
+    } else {
+        resp["success"] = false;
+        resp["message"] = dbResp["msg"].toString();
+    }
+    return resp;
+}
+
+QJsonObject ClientHandler::handleCheckIdCard(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "check_idcard_reply";
+
+    QString idCard = data["idCard"].toString();
+    QJsonObject dbResp = m_dbHandler->checkIdCardExists(idCard);
+
+    if (dbResp["code"].toInt() == 200) {
+        resp["success"] = true;
+        resp["data"] = QJsonObject{
+            {"exists", dbResp["exists"].toBool()}
+        };
     } else {
         resp["success"] = false;
         resp["message"] = dbResp["msg"].toString();

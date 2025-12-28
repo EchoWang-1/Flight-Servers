@@ -61,7 +61,7 @@ QSqlDatabase DbHandler::getThreadSafeDb() {
     return db;
 }
 
-QJsonObject DbHandler::verifyUser(const QString &username, const QString &password)
+QJsonObject DbHandler::verifyUser(const QString &phone, const QString &password)
 {
     QJsonObject resp;
     QSqlDatabase db = getThreadSafeDb();
@@ -72,14 +72,14 @@ QJsonObject DbHandler::verifyUser(const QString &username, const QString &passwo
     }
 
     QSqlQuery query(db);
-    query.prepare("SELECT * FROM userdata WHERE username = :username");
-    query.bindValue(":username", username);
+    query.prepare("SELECT * FROM userdata WHERE phone = :phone");
+    query.bindValue(":phone", phone);
 
     if (query.exec() && query.next()) {
         if (query.value("password").toString() == password) {
             resp["code"] = 200;
             resp["data"] = QJsonObject{
-                {"username", username},
+                {"username", query.value("username").toString()},
                 {"realname", query.value("realname").toString()},
                 {"phone", query.value("phone").toString()},
                 {"email", query.value("email").toString()}
@@ -92,6 +92,124 @@ QJsonObject DbHandler::verifyUser(const QString &username, const QString &passwo
         resp["code"] = 404;
         resp["msg"] = "用户不存在";
     }
+    return resp;
+}
+
+QJsonObject DbHandler::registerUser(const QString &username, const QString &password,
+                                    const QString &phone, const QString &idCard)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    // 检查用户名是否已存在
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM userdata WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next() && query.value(0).toInt() > 0) {
+        resp["code"] = 409;
+        resp["msg"] = "用户名已存在";
+        return resp;
+    }
+
+    // 检查手机号是否已存在
+    query.prepare("SELECT COUNT(*) FROM userdata WHERE phone = :phone");
+    query.bindValue(":phone", phone);
+
+    if (query.exec() && query.next() && query.value(0).toInt() > 0) {
+        resp["code"] = 409;
+        resp["msg"] = "手机号已注册";
+        return resp;
+    }
+
+    // 如果有身份证号，检查是否已存在
+    if (!idCard.isEmpty()) {
+        query.prepare("SELECT COUNT(*) FROM userdata WHERE ID_card_number = :idCard");
+        query.bindValue(":idCard", idCard);
+
+        if (query.exec() && query.next() && query.value(0).toInt() > 0) {
+            resp["code"] = 409;
+            resp["msg"] = "身份证号已注册";
+            return resp;
+        }
+    }
+
+    // 插入新用户（nickname 对应 username，realname 留空）
+    query.prepare("INSERT INTO userdata (username, password, phone, ID_card_number, realname) "
+                  "VALUES (:username, :password, :phone, :idCard, :realname)");
+    query.bindValue(":username", username);
+    query.bindValue(":password", password);
+    query.bindValue(":phone", phone);
+    query.bindValue(":idCard", idCard.isEmpty() ? QVariant() : idCard);
+    query.bindValue(":realname", "");  // realname 留空，因为前端没有提供
+
+    if (query.exec()) {
+        resp["code"] = 200;
+        resp["msg"] = "注册成功";
+        resp["data"] = QJsonObject{
+            {"username", username},
+            {"phone", phone}
+        };
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "注册失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
+
+QJsonObject DbHandler::checkPhoneExists(const QString &phone)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM userdata WHERE phone = :phone");
+    query.bindValue(":phone", phone);
+
+    if (query.exec() && query.next()) {
+        resp["code"] = 200;
+        resp["exists"] = query.value(0).toInt() > 0;
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "查询失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
+
+QJsonObject DbHandler::checkIdCardExists(const QString &idCard)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM userdata WHERE ID_card_number = :idCard");
+    query.bindValue(":idCard", idCard);
+
+    if (query.exec() && query.next()) {
+        resp["code"] = 200;
+        resp["exists"] = query.value(0).toInt() > 0;
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "查询失败: " + query.lastError().text();
+    }
+
     return resp;
 }
 

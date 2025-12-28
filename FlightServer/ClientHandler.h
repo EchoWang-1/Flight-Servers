@@ -23,6 +23,9 @@ private slots:
 private:
     void processRequest(const QJsonObject &request);
     QJsonObject handleLogin(const QJsonObject &data);
+    QJsonObject handleRegister(const QJsonObject &data);
+    QJsonObject handleCheckPhone(const QJsonObject &data);
+    QJsonObject handleCheckIdCard(const QJsonObject &data);
     QJsonObject handleGetUserInfo(const QJsonObject &data);
     QJsonObject handleChangePassword(const QJsonObject &data);
     QJsonObject handleGetFlights(const QJsonObject &data);

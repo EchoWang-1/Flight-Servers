@@ -20,9 +20,14 @@ public:
     bool connectDb(const QString &dsn, const QString &user, const QString &password);
     bool isConnected();
 
-    QJsonObject verifyUser(const QString &username, const QString &password);
+    QJsonObject verifyUser(const QString &phone, const QString &password);
     QJsonObject getUserInfo(const QString &username);
     QJsonObject changePassword(const QString &username, const QString &oldPwd, const QString &newPwd);
+
+    QJsonObject registerUser(const QString &username, const QString &password,
+                             const QString &phone, const QString &idCard);
+    QJsonObject checkPhoneExists(const QString &phone);
+    QJsonObject checkIdCardExists(const QString &idCard);
 
     QJsonObject getFlightList(const QString &username, const QString &fromCity, const QString &toCity, const QString &date);
     QJsonObject bookFlight(const QString &username, const QString &flightNum);
