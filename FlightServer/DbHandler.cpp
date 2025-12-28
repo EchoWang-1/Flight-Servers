@@ -185,7 +185,7 @@ QJsonObject DbHandler::getFlightList(const QString &username, const QString &fro
                 FROM orders o
                 WHERE o.flight_id = f.id
                   AND o.username = :username
-                  AND (o.status = '已预订' OR o.status = '已完成')
+                  AND (o.status = '待出行' OR o.status = '已完成')
                ) as is_booked_count
         FROM flightdata f
         WHERE 1=1
@@ -305,7 +305,7 @@ QJsonObject DbHandler::bookFlight(const QString &username, const QString &flight
         }
 
         QString orderNum = QUuid::createUuid().toString().remove("{").remove("}").remove("-");
-        query.prepare("INSERT INTO orders (order_num, username, flight_id, passenger, seat, price, status, create_time) VALUES (:order_num, :username, :flight_id, :passenger, :seat, :price, '已预订', NOW())");
+        query.prepare("INSERT INTO orders (order_num, username, flight_id, passenger, seat, price, status, create_time) VALUES (:order_num, :username, :flight_id, :passenger, :seat, :price, '待出行', NOW())");
         query.bindValue(":order_num", orderNum);
         query.bindValue(":username", username);
         query.bindValue(":flight_id", flightId);
