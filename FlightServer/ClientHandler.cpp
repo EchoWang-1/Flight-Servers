@@ -129,11 +129,12 @@ QJsonObject ClientHandler::handleGetFlights(const QJsonObject &data)
     QJsonObject resp;
     resp["type"] = "get_flights_reply";
 
+    QString username = data["user_id"].toString();
     QString from = data["from_city"].toString();
     QString to = data["to_city"].toString();
     QString date = data["date"].toString();
 
-    QJsonObject dbResp = m_dbHandler->getFlightList(from, to, date);
+    QJsonObject dbResp = m_dbHandler->getFlightList(username,from, to, date);
     if (dbResp["code"].toInt() == 200) {
         resp["success"] = true;
         resp["data"] = dbResp["data"].toArray();

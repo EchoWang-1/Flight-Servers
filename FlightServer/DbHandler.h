@@ -24,7 +24,7 @@ public:
     QJsonObject getUserInfo(const QString &username);
     QJsonObject changePassword(const QString &username, const QString &oldPwd, const QString &newPwd);
 
-    QJsonObject getFlightList(const QString &fromCity, const QString &toCity, const QString &date);
+    QJsonObject getFlightList(const QString &username, const QString &fromCity, const QString &toCity, const QString &date);
     QJsonObject bookFlight(const QString &username, const QString &flightNum);
 
     QJsonObject getOrderListWithFlight(const QString &username);

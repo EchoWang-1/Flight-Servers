@@ -161,52 +161,127 @@ QJsonObject DbHandler::changePassword(const QString &username, const QString &ol
     return resp;
 }
 
-QJsonObject DbHandler::getFlightList(const QString &fromCity, const QString &toCity, const QString &date)
+QJsonObject DbHandler::getFlightList(const QString &username, const QString &fromCity, const QString &toCity, const QString &date)
 {
     QJsonObject resp;
     QSqlDatabase db = getThreadSafeDb();
+
+    // 1. 检查数据库连接
     if (!db.isOpen()) {
         resp["code"] = 500;
         resp["msg"] = "数据库未连接";
+        qDebug() << "Database not open!";
         return resp;
     }
 
     QSqlQuery query(db);
-    QString sql = "SELECT * FROM flightdata WHERE 1=1";
-    if (!fromCity.isEmpty()) sql += " AND from_city = :from";
-    if (!toCity.isEmpty()) sql += " AND to_city = :to";
-    if (!date.isEmpty()) sql += " AND date = :date";
+
+    // 2. 构造 SQL 语句
+    // 使用子查询：在查询 flightdata 的同时，去 orders 表里统计该用户对该航班的有效订单数
+    // 如果 count > 0，说明已预订
+    QString sql = R"(
+        SELECT f.*,
+               (SELECT COUNT(*)
+                FROM orders o
+                WHERE o.flight_id = f.id
+                  AND o.username = :username
+                  AND (o.status = '已预订' OR o.status = '已完成')
+               ) as is_booked_count
+        FROM flightdata f
+        WHERE 1=1
+    )";
+
+    // 3. 动态拼接筛选条件
+    // 注意：这里的字段名要和数据库 flightdata 表一致，建议加上别名 f. 以防歧义
+    if (!fromCity.isEmpty()) sql += " AND f.from_city = :from";
+    if (!toCity.isEmpty())   sql += " AND f.to_city = :to";
+    if (!date.isEmpty())     sql += " AND f.date = :date";
 
     query.prepare(sql);
+
+    // 4. 绑定参数
+    // 绑定当前查询的用户 (用于判断是否预订)
+    query.bindValue(":username", username);
+   // qDebug() << "------------------------------------------------";
+   // qDebug() << "[查询预订状态] 用户名(username):" << username;
+   // qDebug() << "------------------------------------------------";
+
+    // 绑定筛选条件
     if (!fromCity.isEmpty()) query.bindValue(":from", fromCity);
-    if (!toCity.isEmpty()) query.bindValue(":to", toCity);
-    if (!date.isEmpty()) query.bindValue(":date", date);
+    if (!toCity.isEmpty())   query.bindValue(":to", toCity);
+    if (!date.isEmpty())     query.bindValue(":date", date);
 
     QJsonArray arr;
+
+    // 5. 执行查询与数据映射
     if (query.exec()) {
         while (query.next()) {
-            arr.append(QJsonObject{
-                {"flight_num", query.value("flight_num").toString()},
-                {"from_city", query.value("from_city").toString()},
-                {"to_city", query.value("to_city").toString()},
-                {"date", query.value("date").toString()},
-                {"depart_time", query.value("depart_time").toString()},
-                {"arrive_time", query.value("arrive_time").toString()},
-                {"price", query.value("price").toString()},
-                {"remaining", query.value("remaining").toInt()}
-            });
+            QJsonObject item;
+
+            // --- 基础信息 ---
+            item["flight_number"] = query.value("flight_num").toString();
+            // item["airline"] = query.value("airline").toString(); // 如果表里有就取消注释
+
+            // --- 城市与机场 ---
+            item["startCity"]    = query.value("from_city").toString();
+            item["endCity"]      = query.value("to_city").toString();
+            item["startAirport"] = query.value("from_airport").toString();
+            item["endAirport"]   = query.value("to_airport").toString();
+
+            // --- 时间信息 ---
+            item["startDate"] = query.value("date").toString();
+            item["endDate"]   = query.value("date").toString();
+            item["startTime"] = query.value("depart_Time").toString();
+            item["endTime"]   = query.value("arrive_Time").toString();
+
+            // --- 状态与价格 ---
+            int remaining = query.value("remaining").toInt();
+            QString statusStr;
+            if (remaining > 0) {
+                statusStr = "有票";
+            } else {
+                statusStr = "售罄";
+            }
+            item["status"] = statusStr;
+            item["price"] = query.value("price").toString();
+
+            // 读取我们刚才在 SQL 里生成的临时列 is_booked_count
+            int bookedCount = query.value("is_booked_count").toInt();
+
+            // 如果计数大于0，说明有“已预订”或“已完成”的订单
+            item["isBooked"] = (bookedCount > 0);
+
+         //   qDebug() << "------------------------------------------------";
+         //   qDebug() << "[是否预定调试] 收到预订请求:";
+         //   qDebug() << "[是否预定调试] 预定状态:" << item["isBooked"].toBool();
+         //   qDebug() << "------------------------------------------------";
+
+            arr.append(item);
         }
+
         resp["code"] = 200;
         resp["data"] = arr;
+        qDebug() << "Query success, found rows:" << arr.size();
+
     } else {
         resp["code"] = 500;
-        resp["msg"] = "查询失败";
+        resp["msg"] = "查询失败: " + query.lastError().text();
+        qDebug() << "SQL Error:" << query.lastError().text();
     }
+
     return resp;
 }
 
 QJsonObject DbHandler::bookFlight(const QString &username, const QString &flightNum)
 {
+    // === 【新增调试打印】 ===
+    qDebug() << "------------------------------------------------";
+    qDebug() << "[预订调试] 收到预订请求:";
+    qDebug() << "[预订调试] 用户名(username):" << username;
+    qDebug() << "[预订调试] 航班号(flightNum):" << flightNum;
+    qDebug() << "------------------------------------------------";
+
+
     QJsonObject resp;
     QSqlDatabase db = getThreadSafeDb();
     if (!db.isOpen()) {
