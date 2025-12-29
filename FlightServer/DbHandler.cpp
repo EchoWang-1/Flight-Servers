@@ -328,9 +328,9 @@ QJsonObject DbHandler::getFlightList(const QString &username, const QString &fro
     // 4. 绑定参数
     // 绑定当前查询的用户 (用于判断是否预订)
     query.bindValue(":username", username);
-   // qDebug() << "------------------------------------------------";
-   // qDebug() << "[查询预订状态] 用户名(username):" << username;
-   // qDebug() << "------------------------------------------------";
+    //qDebug() << "------------------------------------------------";
+    //qDebug() << "[查询预订状态] 用户名(username):" << username;
+    //qDebug() << "------------------------------------------------";
 
     // 绑定筛选条件
     if (!fromCity.isEmpty()) query.bindValue(":from", fromCity);
@@ -346,7 +346,7 @@ QJsonObject DbHandler::getFlightList(const QString &username, const QString &fro
 
             // --- 基础信息 ---
             item["flight_number"] = query.value("flight_num").toString();
-            // item["airline"] = query.value("airline").toString(); // 如果表里有就取消注释
+            item["airline"] = query.value("airline").toString(); // 如果表里有就取消注释
 
             // --- 城市与机场 ---
             item["startCity"]    = query.value("from_city").toString();
@@ -377,10 +377,10 @@ QJsonObject DbHandler::getFlightList(const QString &username, const QString &fro
             // 如果计数大于0，说明有“已预订”或“已完成”的订单
             item["isBooked"] = (bookedCount > 0);
 
-         //   qDebug() << "------------------------------------------------";
-         //   qDebug() << "[是否预定调试] 收到预订请求:";
-         //   qDebug() << "[是否预定调试] 预定状态:" << item["isBooked"].toBool();
-         //   qDebug() << "------------------------------------------------";
+            //qDebug() << "------------------------------------------------";
+            //qDebug() << "[是否预定调试] 收到预订请求:";
+            //qDebug() << "[是否预定调试] 预定状态:" << item["isBooked"].toBool();
+            //qDebug() << "------------------------------------------------";
 
             arr.append(item);
         }
