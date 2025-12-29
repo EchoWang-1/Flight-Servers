@@ -46,8 +46,21 @@ void ClientHandler::onDisconnected()
 void ClientHandler::processRequest(const QJsonObject &request)
 {
     QString type = request["type"].toString();
-    QJsonObject data = request["data"].toObject();
+    QJsonObject data ;
     QJsonObject resp;
+
+    // 检查请求结构：有些请求数据在data字段，有些直接在根级别
+    if (request.contains("data") && request["data"].isObject()) {
+        data = request["data"].toObject();
+    } else {
+        // 如果没有data字段，尝试从根级别获取相关字段
+        data = request;
+        // 移除type字段，避免混淆
+        data.remove("type");
+    }
+
+    qDebug() << "处理请求类型:" << type;
+    qDebug() << "最终使用的数据:" << data;
 
     if (type == "login") {
         resp = handleLogin(data);
@@ -91,6 +104,8 @@ QJsonObject ClientHandler::handleLogin(const QJsonObject &data)
     if (dbResp["code"].toInt() == 200) {
         resp["success"] = true;
         resp["data"] = dbResp["data"].toObject();
+        // 添加调试信息
+        qDebug() << "登录成功，返回前端的数据:" << resp["data"].toObject();
     } else {
         resp["success"] = false;
         resp["message"] = dbResp["msg"].toString();

@@ -78,12 +78,18 @@ QJsonObject DbHandler::verifyUser(const QString &phone, const QString &password)
     if (query.exec() && query.next()) {
         if (query.value("password").toString() == password) {
             resp["code"] = 200;
-            resp["data"] = QJsonObject{
-                {"username", query.value("username").toString()},
-                {"realname", query.value("realname").toString()},
-                {"phone", query.value("phone").toString()},
-                {"email", query.value("email").toString()}
-            };
+            // 确保返回完整的用户数据，包含 username 字段
+            QJsonObject userData;
+            userData["username"] = query.value("username").toString();
+            userData["realname"] = query.value("realname").toString();
+            userData["phone"] = query.value("phone").toString();
+            userData["email"] = query.value("email").toString();
+            userData["ID_card_number"] = query.value("ID_card_number").toString();
+
+            resp["data"] = userData;
+            resp["msg"] = "登录成功";
+
+            qDebug() << "登录验证成功，返回用户数据:" << userData;
         } else {
             resp["code"] = 401;
             resp["msg"] = "密码错误";
@@ -251,6 +257,7 @@ QJsonObject DbHandler::changePassword(const QString &username, const QString &ol
         resp["msg"] = "数据库未连接";
         return resp;
     }
+    qDebug() << "数据库修改密码 - 查询用户名:" << username;
 
     QSqlQuery query(db);
     query.prepare("SELECT password FROM userdata WHERE username = :username");
@@ -275,6 +282,7 @@ QJsonObject DbHandler::changePassword(const QString &username, const QString &ol
     } else {
         resp["code"] = 404;
         resp["msg"] = "用户不存在";
+        qDebug() << "用户不存在 - 查询的用户名:" << username;
     }
     return resp;
 }
