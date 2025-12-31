@@ -82,7 +82,15 @@ void ClientHandler::processRequest(const QJsonObject &request)
         resp = handleGetOrders(data);
     } else if (type == "refund_order") {
         resp = handleRefundOrder(data);
-    } else {
+    } else if (type == "add_passenger") {
+        resp = handleAddPassenger(data);
+    } else if (type == "get_passengers") {
+        resp = handleGetPassengers(data);
+    } else if (type == "update_passenger") {
+        resp = handleUpdatePassenger(data);
+    } else if (type == "delete_passenger") {
+        resp = handleDeletePassenger(data);
+    }else {
         resp["type"] = "error";
         resp["success"] = false;
         resp["message"] = "未知请求类型";
@@ -269,6 +277,71 @@ QJsonObject ClientHandler::handleRefundOrder(const QJsonObject &data)
     QString username = data["user_id"].toString();
 
     QJsonObject dbResp = m_dbHandler->refundOrder(orderNum, username);
+    resp["success"] = (dbResp["code"].toInt() == 200);
+    resp["message"] = dbResp["msg"].toString();
+    return resp;
+}
+
+QJsonObject ClientHandler::handleAddPassenger(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "add_passenger_reply";
+
+    QString username = data["user_id"].toString();
+    QString realName = data["real_name"].toString();
+    QString idCard = data["ID_card_number"].toString();
+    QString phone = data["phone_number"].toString();
+
+    QJsonObject dbResp = m_dbHandler->addPassenger(username, realName, idCard, phone);
+    resp["success"] = (dbResp["code"].toInt() == 200);
+    resp["message"] = dbResp["msg"].toString();
+    return resp;
+}
+
+QJsonObject ClientHandler::handleGetPassengers(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "get_passengers_reply";
+
+    QString username = data["user_id"].toString();
+    QJsonObject dbResp = m_dbHandler->getPassengers(username);
+
+    if (dbResp["code"].toInt() == 200) {
+        resp["success"] = true;
+        resp["data"] = dbResp["data"].toArray();
+    } else {
+        resp["success"] = false;
+        resp["message"] = dbResp["msg"].toString();
+    }
+    return resp;
+}
+
+QJsonObject ClientHandler::handleUpdatePassenger(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "update_passenger_reply";
+
+    QString passengerId = data["id"].toString();
+    QString realName = data["real_name"].toString();
+    QString idCard = data["ID_card_number"].toString();
+    QString phone = data["phone_number"].toString();
+    QString username = data["user_id"].toString(); // 用于权限验证
+
+    QJsonObject dbResp = m_dbHandler->updatePassenger(passengerId, username, realName, idCard, phone);
+    resp["success"] = (dbResp["code"].toInt() == 200);
+    resp["message"] = dbResp["msg"].toString();
+    return resp;
+}
+
+QJsonObject ClientHandler::handleDeletePassenger(const QJsonObject &data)
+{
+    QJsonObject resp;
+    resp["type"] = "delete_passenger_reply";
+
+    QString passengerId = data["id"].toString();
+    QString username = data["user_id"].toString(); // 用于权限验证
+
+    QJsonObject dbResp = m_dbHandler->deletePassenger(passengerId, username);
     resp["success"] = (dbResp["code"].toInt() == 200);
     resp["message"] = dbResp["msg"].toString();
     return resp;

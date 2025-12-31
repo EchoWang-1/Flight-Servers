@@ -32,6 +32,10 @@ private:
     QJsonObject handleBookFlight(const QJsonObject &data);
     QJsonObject handleGetOrders(const QJsonObject &data);
     QJsonObject handleRefundOrder(const QJsonObject &data);
+    QJsonObject handleAddPassenger(const QJsonObject &data);
+    QJsonObject handleGetPassengers(const QJsonObject &data);
+    QJsonObject handleUpdatePassenger(const QJsonObject &data);
+    QJsonObject handleDeletePassenger(const QJsonObject &data);
 
     qintptr m_socketDescriptor;
     QTcpSocket *m_socket;

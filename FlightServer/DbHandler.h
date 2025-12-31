@@ -34,9 +34,15 @@ public:
 
     QJsonObject getOrderListWithFlight(const QString &username);
     QJsonObject refundOrder(const QString &orderNum, const QString &username);
+    QJsonObject getPassengers(const QString &username);
 
+    QJsonObject addPassenger(const QString &username, const QString &realName,
+                             const QString &idCard, const QString &phone);
+
+    QJsonObject updatePassenger(const QString &passengerId, const QString &username,
+                                const QString &realName, const QString &idCard, const QString &phone);
+    QJsonObject deletePassenger(const QString &passengerId, const QString &username);
     QSqlDatabase getDb() const { return m_db; }
-
 private:
     QSqlDatabase getThreadSafeDb();
     QSqlDatabase m_db;

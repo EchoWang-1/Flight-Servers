@@ -553,3 +553,181 @@ QJsonObject DbHandler::refundOrder(const QString &orderNum, const QString &usern
     }
     return resp;
 }
+
+QJsonObject DbHandler::addPassenger(const QString &username, const QString &realName,
+                                    const QString &idCard, const QString &phone)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    // 检查身份证是否已存在
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM passengers WHERE ID_card_number = :idCard AND username = :username");
+    query.bindValue(":idCard", idCard);
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next() && query.value(0).toInt() > 0) {
+        resp["code"] = 409;
+        resp["msg"] = "该身份证号已存在";
+        return resp;
+    }
+
+    // 插入新乘机人
+    query.prepare("INSERT INTO passengers (username, real_name, ID_card_number, phone_number) "
+                  "VALUES (:username, :realName, :idCard, :phone)");
+    query.bindValue(":username", username);
+    query.bindValue(":realName", realName);
+    query.bindValue(":idCard", idCard);
+    query.bindValue(":phone", phone);
+
+    if (query.exec()) {
+        resp["code"] = 200;
+        resp["msg"] = "添加成功";
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "添加失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
+
+QJsonObject DbHandler::getPassengers(const QString &username)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT id, real_name, ID_card_number, phone_number FROM passengers WHERE username = :username");
+    query.bindValue(":username", username);
+
+    QJsonArray passengers;
+    if (query.exec()) {
+        while (query.next()) {
+            QJsonObject passenger;
+            passenger["id"] = query.value("id").toString();
+            passenger["real_name"] = query.value("real_name").toString();
+            passenger["ID_card_number"] = query.value("ID_card_number").toString();
+            passenger["phone_number"] = query.value("phone_number").toString();
+            passengers.append(passenger);
+        }
+        resp["code"] = 200;
+        resp["data"] = passengers;
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "查询失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
+
+QJsonObject DbHandler::updatePassenger(const QString &passengerId, const QString &username,
+                                       const QString &realName, const QString &idCard, const QString &phone)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    // 先验证该乘机人属于当前用户（防止越权修改）
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM passengers WHERE id = :id AND username = :username");
+    query.bindValue(":id", passengerId);
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        if (query.value(0).toInt() == 0) {
+            resp["code"] = 403;
+            resp["msg"] = "无权修改该乘机人信息";
+            return resp;
+        }
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "验证权限失败: " + query.lastError().text();
+        return resp;
+    }
+
+    // 检查身份证号是否与其他乘机人冲突（排除自己）
+    query.prepare("SELECT COUNT(*) FROM passengers WHERE ID_card_number = :idCard AND username = :username AND id != :id");
+    query.bindValue(":idCard", idCard);
+    query.bindValue(":username", username);
+    query.bindValue(":id", passengerId);
+
+    if (query.exec() && query.next() && query.value(0).toInt() > 0) {
+        resp["code"] = 409;
+        resp["msg"] = "该身份证号已被其他乘机人使用";
+        return resp;
+    }
+
+    // 更新乘机人信息
+    query.prepare("UPDATE passengers SET real_name = :realName, ID_card_number = :idCard, phone_number = :phone WHERE id = :id");
+    query.bindValue(":realName", realName);
+    query.bindValue(":idCard", idCard);
+    query.bindValue(":phone", phone);
+    query.bindValue(":id", passengerId);
+
+    if (query.exec()) {
+        resp["code"] = 200;
+        resp["msg"] = "更新成功";
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "更新失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
+
+QJsonObject DbHandler::deletePassenger(const QString &passengerId, const QString &username)
+{
+    QJsonObject resp;
+    QSqlDatabase db = getThreadSafeDb();
+    if (!db.isOpen()) {
+        resp["code"] = 500;
+        resp["msg"] = "数据库未连接";
+        return resp;
+    }
+
+    // 先验证该乘机人属于当前用户（防止越权删除）
+    QSqlQuery query(db);
+    query.prepare("SELECT COUNT(*) FROM passengers WHERE id = :id AND username = :username");
+    query.bindValue(":id", passengerId);
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        if (query.value(0).toInt() == 0) {
+            resp["code"] = 403;
+            resp["msg"] = "无权删除该乘机人信息";
+            return resp;
+        }
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "验证权限失败: " + query.lastError().text();
+        return resp;
+    }
+
+    // 删除乘机人
+    query.prepare("DELETE FROM passengers WHERE id = :id");
+    query.bindValue(":id", passengerId);
+
+    if (query.exec()) {
+        resp["code"] = 200;
+        resp["msg"] = "删除成功";
+    } else {
+        resp["code"] = 500;
+        resp["msg"] = "删除失败: " + query.lastError().text();
+    }
+
+    return resp;
+}
